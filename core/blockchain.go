@@ -4,11 +4,15 @@ import (
 	"math/rand"
 	"nis3607/mylogger"
 	"time"
+	"bytes"
 )
 
-type Block struct {
+type Block struct {		//seq是区块的编号，data的值不重要
 	Seq  uint64
 	Data []byte
+	target	[]byte		//用difficulty来构造，要求区块计算的哈希值小于这个目标值
+	nonce	uint64		//每个区块给自己设定的随机值，参与哈希计算
+	hash  []byte		//用nonce算出的hash值，通过和target的比较来证明工作量
 }
 
 type BlockChain struct {
@@ -41,7 +45,7 @@ func Block2Hash(block *Block) []byte {
 	return hash
 }
 
-func Hash2Key(hash []byte) string {
+func Hash2Key(hash []byte) string {		//将哈希值转成密钥
 	var key []byte
 	for i := 0; i < 20; i++ {
 		key = append(key, uint8(97)+uint8(hash[i]%(26)))
@@ -53,13 +57,21 @@ func Block2Key(block *Block) string {
 }
 
 func (bc *BlockChain) AddBlockToChain(block *Block) {
+	//在这里添加检查validity的代码，prove了工作量的区块才能加进来
+	h := block.hash
+	t := block.target
+	if bytes.Compare(h, t) !=-1{
+		return
+	}
+
+
 	bc.Blocks = append(bc.Blocks, block)
 	bc.KeysMap[block] = Block2Key(block)
 	bc.BlocksMap[Block2Key(block)] = block
 }
 
 // Generate a Block: max rate is 20 blocks/s
-func (bc *BlockChain) getBlock(seq uint64) *Block {
+func (bc *BlockChain) getBlock(seq uint64) *Block {//generate a block
 	//slow down
 	time.Sleep(time.Duration(50) * time.Millisecond)
 	data := make([]byte, bc.BlockSize)
@@ -69,12 +81,16 @@ func (bc *BlockChain) getBlock(seq uint64) *Block {
 	block := &Block{
 		Seq:  seq,
 		Data: data,
+		//初始化
+		target: data,
+		nonce: uint64(0),
+		hash: data,
 	}
 	bc.logger.DPrintf("generate Block[%v] in seq %v at %v", Block2Key(block), block.Seq, time.Now().UnixNano())
 	return block
 }
 
-func (bc *BlockChain) commitBlock(block *Block) {
+func (bc *BlockChain) commitBlock(block *Block) {	//上传到logger
 	bc.AddBlockToChain(block)
 	bc.logger.DPrintf("commit Block[%v] in seq %v at %v", Block2Key(block), block.Seq, time.Now().UnixNano())
 }
