@@ -133,6 +133,9 @@ func (c *Consensus) Run() {
 
 //以下为添加的代码，包括给consensus的区块链中的每个区块确定target， 计算哈希值，寻找Nonce，etc.
 func (c *Consensus) GetTarget() {
+	if c.blockChain.Blocks == nil {
+		return 
+	}
 	for _, block := range c.blockChain.Blocks {
 		target := make([]byte, 1024)
 		for i := uint64(0); i < 1024 - diff; i++{
