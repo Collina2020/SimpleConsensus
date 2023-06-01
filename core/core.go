@@ -98,13 +98,13 @@ func (c *Consensus) handleMsgExample(msg *myrpc.ConsensusMsg) {
 	block := &Block{
 		Seq:    msg.Seq,
 		Data:   msg.Data,
-		target: msg.Target,
-		nonce:  msg.Nonce,
-		hash:   msg.Hash,
+		Target: msg.Target,
+		Nonce:  msg.Nonce,
+		Hash:   msg.Hash,
 	}
 
-	h := block.hash
-	t := block.target
+	h := block.Hash
+	t := block.Target
 	if bytes.Compare(h, t) != -1 {
 		return
 	} //验证是否有效，有效的话把它加入区块链
@@ -120,9 +120,9 @@ func (c *Consensus) proposeLoop() {
 				From:   c.id,
 				Seq:    block.Seq,
 				Data:   block.Data,
-				Target: block.target,
-				Nonce:  block.nonce,
-				Hash:   block.hash,
+				Target: block.Target,
+				Nonce:  block.Nonce,
+				Hash:   block.Hash,
 			}
 			c.broadcastMessage(msg)
 			c.seq++
@@ -163,7 +163,7 @@ func (c *Consensus) GetTarget() {
 		}
 
 		c.targetsMap[block] = target
-		block.target = target
+		block.Target = target
 
 	}
 
@@ -192,10 +192,10 @@ func (c *Consensus) GetNonce() {
 		nonce = 0
 		for {
 			data := block.Data
-			hash := Nonce2Hash(nonce, data)
-			target := c.targetsMap[block]
-			if bytes.Compare(hash, target) == -1 {
-				block.hash = hash
+			Hash := Nonce2Hash(nonce, data)
+			Target := c.targetsMap[block]
+			if bytes.Compare(Hash, Target) == -1 {
+				block.Hash = Hash
 				break
 			} else {
 				nonce++
@@ -203,7 +203,7 @@ func (c *Consensus) GetNonce() {
 
 		}
 		c.nonceMap[block] = nonce
-		block.nonce = nonce
+		block.Nonce = nonce
 
 	}
 
