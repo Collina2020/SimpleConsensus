@@ -1,6 +1,8 @@
 package core
 
 import (
+	"bytes"
+	"encoding/binary"
 	"log"
 	"math/rand"
 	"net"
@@ -8,17 +10,18 @@ import (
 	"net/rpc"
 	"strconv"
 	"time"
-	"encoding/binary"
-	"bytes"
 
 	"nis3607/mylogger"
 	"nis3607/myrpc"
 )
-const(	diff = 4)	//PoW的difficulty, 代表难度系数，如果赋值为1，则需要判断生成区块时所产生的Hash前缀至少包含1个0
+
+const (
+	diff = 4
+) //PoW的difficulty, 代表难度系数，如果赋值为1，则需要判断生成区块时所产生的Hash前缀至少包含1个0
 
 type Consensus struct {
-	id   uint8		//节点的编号
-	n    uint8		//节点总数
+	id   uint8 //节点的编号
+	n    uint8 //节点总数
 	port uint64
 	seq  uint64
 	//BlockChain
@@ -31,8 +34,8 @@ type Consensus struct {
 	msgChan chan *myrpc.ConsensusMsg
 
 	//以下为自行添加的共识属性，包括每个区块的target, nonce
-	targetsMap  map[*Block][]byte
-	nonceMap map[*Block]uint64
+	targetsMap map[*Block][]byte
+	nonceMap   map[*Block]uint64
 }
 
 func InitConsensus(config *Configuration) *Consensus {
@@ -44,12 +47,15 @@ func InitConsensus(config *Configuration) *Consensus {
 		seq:        0,
 		blockChain: InitBlockChain(config.Id, config.BlockSize),
 		targetsMap: make(map[*Block][]byte),
-		nonceMap: make(map[*Block]uint64),
+		nonceMap:   make(map[*Block]uint64),
 		logger:     mylogger.InitLogger("node", config.Id),
 		peers:      make([]*myrpc.ClientEnd, 0),
 
 		msgChan: make(chan *myrpc.ConsensusMsg, 1024),
-	} 
+	}
+
+	c.blockChain.getBlock(0)
+
 	for _, peer := range config.Committee {
 		clientEnd := &myrpc.ClientEnd{Port: uint64(peer)}
 		c.peers = append(c.peers, clientEnd)
@@ -58,7 +64,6 @@ func InitConsensus(config *Configuration) *Consensus {
 	//在这里添加pow共识机制
 	c.GetTarget()
 	c.GetNonce()
-
 
 	go c.serve()
 
@@ -91,9 +96,19 @@ func (c *Consensus) broadcastMessage(msg *myrpc.ConsensusMsg) {
 
 func (c *Consensus) handleMsgExample(msg *myrpc.ConsensusMsg) {
 	block := &Block{
-		Seq:  msg.Seq,
-		Data: msg.Data,
+		Seq:    msg.Seq,
+		Data:   msg.Data,
+		target: msg.Target,
+		nonce:  msg.Nonce,
+		hash:   msg.Hash,
 	}
+
+	h := block.hash
+	t := block.target
+	if bytes.Compare(h, t) != -1 {
+		return
+	} //验证是否有效，有效的话把它加入区块链
+
 	c.blockChain.commitBlock(block)
 }
 
@@ -102,9 +117,12 @@ func (c *Consensus) proposeLoop() {
 		if c.id == 0 {
 			block := c.blockChain.getBlock(c.seq)
 			msg := &myrpc.ConsensusMsg{
-				From: c.id,
-				Seq:  block.Seq,
-				Data: block.Data,
+				From:   c.id,
+				Seq:    block.Seq,
+				Data:   block.Data,
+				Target: block.target,
+				Nonce:  block.nonce,
+				Hash:   block.hash,
 			}
 			c.broadcastMessage(msg)
 			c.seq++
@@ -129,65 +147,66 @@ func (c *Consensus) Run() {
 	}
 }
 
-
-
-//以下为添加的代码，包括给consensus的区块链中的每个区块确定target， 计算哈希值，寻找Nonce，etc.
+// 以下为添加的代码，包括给consensus的区块链中的每个区块确定target， 计算哈希值，寻找Nonce，etc.
 func (c *Consensus) GetTarget() {
-	if c.blockChain.Blocks == nil {
-		return 
+	if c.blockChain == nil || c.blockChain.Blocks == nil {
+		return
 	}
+	l := c.blockChain.BlockSize
 	for _, block := range c.blockChain.Blocks {
-		target := make([]byte, 1024)
-		for i := uint64(0); i < 1024 - diff; i++{
+		target := make([]byte, l)
+		for i := uint64(0); i < l-diff; i++ {
 			target[i] = byte(0)
 		}
-		for i := 1024 - diff; i < 1024; i++ {
+		for i := l - diff; i < l; i++ {
 			target[i] = byte(rand.Intn(256))
 		}
 
 		c.targetsMap[block] = target
 		block.target = target
-		
-	}	
-	
-	return 
+
+	}
+
+	return
 }
 
-//对于给定的nonce和区块的data，通过nonce计算区块的哈希值
-func Nonce2Hash(nonce uint64,data []byte) []byte{
+// 对于给定的nonce和区块的data，通过nonce计算区块的哈希值
+func Nonce2Hash(nonce uint64, data []byte) []byte {
 	nonceBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(nonceBytes, nonce)
 
 	combinedData := append(nonceBytes, data...)
 
-	hash,_ := ComputeHash(combinedData)
+	hash, _ := ComputeHash(combinedData)
 
 	return hash
 
 }
 
-func (c *Consensus) GetNonce(){
+func (c *Consensus) GetNonce() {
 	var nonce uint64
+	if c.blockChain == nil || c.blockChain.Blocks == nil {
+		return
+	}
 	for _, block := range c.blockChain.Blocks {
 		nonce = 0
-		for{
+		for {
 			data := block.Data
-			hash := Nonce2Hash(nonce,data)
+			hash := Nonce2Hash(nonce, data)
 			target := c.targetsMap[block]
-			if bytes.Compare(hash, target)==-1{
+			if bytes.Compare(hash, target) == -1 {
 				block.hash = hash
 				break
-			} else{
+			} else {
 				nonce++
 			}
 
 		}
 		c.nonceMap[block] = nonce
 		block.nonce = nonce
-		
-	}	
-	
-	return 
-	
-}
 
+	}
+
+	return
+
+}
