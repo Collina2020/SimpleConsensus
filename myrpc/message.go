@@ -26,9 +26,9 @@ type ConsensusMsg struct {
 	From uint8
 	Seq  uint64
 	Data []byte
-	target	[]byte		//用difficulty来构造，要求区块计算的哈希值小于这个目标值
-	nonce	uint64		//每个区块给自己设定的随机值，参与哈希计算
-	hash  []byte		//用nonce算出的hash值，通过和target的比较来证明工作量
+	Target	[]byte		//用difficulty来构造，要求区块计算的哈希值小于这个目标值
+	Nonce	uint64		//每个区块给自己设定的随机值，参与哈希计算
+	Hash  []byte		//用nonce算出的hash值，通过和target的比较来证明工作量
 }
 
 type ConsensusMsgReply struct {
