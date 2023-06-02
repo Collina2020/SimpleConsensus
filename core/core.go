@@ -83,7 +83,7 @@ func (c *Consensus) broadcastMessage(msg *myrpc.ConsensusMsg) {
 	}
 }
 
-func (c *Consensus) handleMsgExample(msg *myrpc.ConsensusMsg) {
+func (c *Consensus) handleMsgExample(msg *myrpc.ConsensusMsg, bestblock *Block, besttime int64) *Block {
 	block := &Block{
 		Seq:    msg.Seq,
 		Data:   msg.Data,
@@ -92,15 +92,21 @@ func (c *Consensus) handleMsgExample(msg *myrpc.ConsensusMsg) {
 		Hash:   msg.Hash,
 	}
 
-	valid := checkWork(msg.Hash, msg.Target)
-	if valid {
-		c.blockChain.commitBlock(block) //如果有效的话，提交这个block
-		//seq更新，以备节点重新生成一个区块并开始计算
-		c.seq++
+	if bestblock == nil {
+		return block
 	}
+
+	valid := checkWork(msg.Hash, msg.Target)
+	if valid && block.Seq == c.seq {
+		if msg.Time < besttime {
+			return block
+		}
+	}
+
+	return bestblock
 }
 
-func (c *Consensus) propose(block *Block) {
+func (c *Consensus) propose(block *Block, time int64) {
 
 	msg := &myrpc.ConsensusMsg{
 		From:   c.id,
@@ -109,6 +115,7 @@ func (c *Consensus) propose(block *Block) {
 		Target: block.Target,
 		Nonce:  block.Nonce,
 		Hash:   block.Hash,
+		Time:   time,
 	}
 	c.broadcastMessage(msg)
 
@@ -122,10 +129,28 @@ func (c *Consensus) Run() {
 		c.peers[id].Connect()
 	}
 	//handle received message
+	msgcnt := uint8(0)
+	Time := int64(0)
+	besttime := int64(0)
+	bestblock := &Block{}
+
 	for {
 		select {
 		case msg := <-c.msgChan:
-			c.handleMsgExample(msg)
+			optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
+			if optionalbestblock != bestblock {
+				bestblock = optionalbestblock
+				besttime = msg.Time
+			}
+			msgcnt++
+			if msgcnt == 3 {
+				c.blockChain.commitBlock(bestblock)
+				c.seq++
+				msgcnt = 0
+				Time = 0
+				bestblock = nil
+				continue
+			}
 		default:
 			seq := c.seq
 			block := c.blockChain.getBlock(seq)
@@ -133,11 +158,11 @@ func (c *Consensus) Run() {
 			c.GetNonce(block)
 			valid := checkWork(block.Hash, block.Target)
 			if valid {
-				c.blockChain.commitBlock(block) //如果有效的话，提交这个block
-				//seq更新，以备节点重新生成一个区块并开始计算
-				c.seq++
+				Time = time.Now().UnixNano()
+				c.propose(block, Time)
+				bestblock = block
 			}
-			c.propose(block)
+
 		}
 	}
 }
@@ -160,11 +185,9 @@ func (c *Consensus) GetTarget(block *Block) {
 func Nonce2Hash(nonce uint8, data []byte) []byte {
 	hash := make([]byte, 10)
 
-
 	for i := uint8(0); i < 10; i++ {
 		hash[i] = nonce + data[i]
 	}
-
 
 	return hash
 
@@ -186,7 +209,7 @@ func (c *Consensus) GetNonce(block *Block) {
 			block.Hash = Hash
 			break
 		} else {
-			nonce = nonce+1
+			nonce = nonce + 1
 		}
 
 	}
