@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"nis3607/mylogger"
 	"time"
@@ -60,7 +61,9 @@ func (bc *BlockChain) AddBlockToChain(block *Block) {
 	//在这里添加检查validity的代码，prove了工作量的区块才能加进来
 	h := block.Hash
 	t := block.Target
-	if bytes.Compare(h, t) != -1 {
+
+	if bytes.Compare(h, t) == 1 {
+		fmt.Printf("invalid")
 		return
 	}
 
@@ -74,6 +77,7 @@ func (bc *BlockChain) getBlock(seq uint64) *Block { //generate a block
 	//slow down
 	time.Sleep(time.Duration(50) * time.Millisecond)
 	data := make([]byte, bc.BlockSize)
+	target := make([]byte, bc.BlockSize)
 	for i := uint64(0); i < bc.BlockSize; i++ {
 		data[i] = byte(rand.Intn(256))
 	}
@@ -81,9 +85,9 @@ func (bc *BlockChain) getBlock(seq uint64) *Block { //generate a block
 		Seq:  seq,
 		Data: data,
 		//初始化
-		Target: data,
+		Target: target,
 		Nonce:  uint64(0),
-		Hash:   data,
+		Hash:   target,
 	}
 	bc.logger.DPrintf("generate Block[%v] in seq %v at %v", Block2Key(block), block.Seq, time.Now().UnixNano())
 	return block
@@ -92,4 +96,12 @@ func (bc *BlockChain) getBlock(seq uint64) *Block { //generate a block
 func (bc *BlockChain) commitBlock(block *Block) { //上传到logger
 	bc.AddBlockToChain(block)
 	bc.logger.DPrintf("commit Block[%v] in seq %v at %v", Block2Key(block), block.Seq, time.Now().UnixNano())
+}
+
+func checkWork(hash []byte, target []byte) bool {
+	if bytes.Compare(hash, target) == -1 {
+		return true
+	} else {
+		return false
+	}
 }
