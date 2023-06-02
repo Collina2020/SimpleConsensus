@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"math/rand"
@@ -17,8 +16,8 @@ import (
 )
 
 const (
-	diff = 2
-) //PoW的difficulty, 代表难度系数，如果赋值为1，则需要判断生成区块时所产生的Hash前缀至少包含1个0
+	diff = 6
+)
 
 type Consensus struct {
 	id   uint8 //节点的编号
@@ -150,11 +149,7 @@ func (c *Consensus) GetTarget(block *Block) {
 		return
 	}
 
-	l := c.blockChain.BlockSize
-	for i := uint64(0); i < l-diff; i++ {
-		block.Target[i] = byte(0)
-	}
-	for i := l - diff; i < l; i++ {
+	for i := 0; i < 10; i++ {
 		block.Target[i] = byte(rand.Intn(256))
 	}
 
@@ -162,20 +157,21 @@ func (c *Consensus) GetTarget(block *Block) {
 }
 
 // 对于给定的nonce和区块的data，通过nonce计算区块的哈希值
-func Nonce2Hash(nonce uint64, data []byte) []byte {
-	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, nonce)
+func Nonce2Hash(nonce uint8, data []byte) []byte {
+	hash := make([]byte, 10)
 
-	combinedData := append(nonceBytes, data...)
 
-	hash, _ := ComputeHash(combinedData)
+	for i := uint8(0); i < 10; i++ {
+		hash[i] = nonce + data[i]
+	}
+
 
 	return hash
 
 }
 
 func (c *Consensus) GetNonce(block *Block) {
-	var nonce uint64
+	var nonce uint8
 	if block == nil {
 		fmt.Printf("nil error")
 		return
@@ -186,11 +182,11 @@ func (c *Consensus) GetNonce(block *Block) {
 		data := block.Data
 		Hash := Nonce2Hash(nonce, data)
 		Target := block.Target
-		if bytes.Compare(Hash, Target) == -1 {
+		if bytes.Compare(Hash, Target) == 1 {
 			block.Hash = Hash
 			break
 		} else {
-			nonce++
+			nonce = nonce+1
 		}
 
 	}

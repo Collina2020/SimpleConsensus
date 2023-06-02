@@ -12,7 +12,7 @@ type Block struct { //seq是区块的编号，data的值不重要
 	Seq    uint64
 	Data   []byte
 	Target []byte //用difficulty来构造，要求区块计算的哈希值小于这个目标值
-	Nonce  uint64 //每个区块给自己设定的随机值，参与哈希计算
+	Nonce  uint8 //每个区块给自己设定的随机值，参与哈希计算
 	Hash   []byte //用nonce算出的hash值，通过和target的比较来证明工作量
 }
 
@@ -62,7 +62,7 @@ func (bc *BlockChain) AddBlockToChain(block *Block) {
 	h := block.Hash
 	t := block.Target
 
-	if bytes.Compare(h, t) == 1 {
+	if bytes.Compare(h, t) == -1 {
 		fmt.Printf("invalid")
 		return
 	}
@@ -77,7 +77,7 @@ func (bc *BlockChain) getBlock(seq uint64) *Block { //generate a block
 	//slow down
 	time.Sleep(time.Duration(50) * time.Millisecond)
 	data := make([]byte, bc.BlockSize)
-	target := make([]byte, bc.BlockSize)
+	target := make([]byte, 10)
 	for i := uint64(0); i < bc.BlockSize; i++ {
 		data[i] = byte(rand.Intn(256))
 	}
@@ -86,7 +86,7 @@ func (bc *BlockChain) getBlock(seq uint64) *Block { //generate a block
 		Data: data,
 		//初始化
 		Target: target,
-		Nonce:  uint64(0),
+		Nonce:  uint8(0),
 		Hash:   target,
 	}
 	bc.logger.DPrintf("generate Block[%v] in seq %v at %v", Block2Key(block), block.Seq, time.Now().UnixNano())
@@ -99,7 +99,7 @@ func (bc *BlockChain) commitBlock(block *Block) { //上传到logger
 }
 
 func checkWork(hash []byte, target []byte) bool {
-	if bytes.Compare(hash, target) == -1 {
+	if bytes.Compare(hash, target) == 1 {
 		return true
 	} else {
 		return false
