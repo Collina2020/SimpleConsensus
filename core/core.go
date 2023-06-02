@@ -137,12 +137,16 @@ func (c *Consensus) Run() {
 	for {
 		select {
 		case msg := <-c.msgChan:
-			optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
-			if optionalbestblock != bestblock {
-				bestblock = optionalbestblock
-				besttime = msg.Time
+			if msg.Seq == c.seq {
+				optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
+				if optionalbestblock != bestblock {
+					bestblock = optionalbestblock
+					besttime = msg.Time
+				}
+				msgcnt++
+
 			}
-			msgcnt++
+
 			if msgcnt == 3 {
 				c.blockChain.commitBlock(bestblock)
 				c.seq++
