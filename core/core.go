@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	diff = 6
+	diff = 1
 )
 
 type Consensus struct {
@@ -115,7 +115,7 @@ func (c *Consensus) propose(block *Block, time int64) {
 		Target: block.Target,
 		Nonce:  block.Nonce,
 		Hash:   block.Hash,
-		Time:   time,
+		Time: time,
 	}
 	c.broadcastMessage(msg)
 
@@ -129,46 +129,49 @@ func (c *Consensus) Run() {
 		c.peers[id].Connect()
 	}
 	//handle received message
-	msgcnt := uint8(0)
 	Time := int64(0)
 	besttime := int64(0)
 	bestblock := &Block{}
-
+	msgcnt := 0
 	for {
-		select {
+		seq := c.seq
+		block := c.blockChain.getBlock(seq)
+		c.GetTarget(block)
+		c.GetNonce(block)
+		valid := checkWork(block.Hash, block.Target)
+		if valid {
+			Time = time.Now().UnixNano()
+			c.propose(block, Time)
+			bestblock = block
+			besttime = Time
+		}
+		for {
+			if msgcnt < 6{
+			select{
 		case msg := <-c.msgChan:
 			if msg.Seq == c.seq {
+				msgcnt++
 				optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
 				if optionalbestblock != bestblock {
 					bestblock = optionalbestblock
 					besttime = msg.Time
 				}
-				msgcnt++
-
-			}
-
-			if msgcnt == 3 {
-				c.blockChain.commitBlock(bestblock)
-				c.seq++
-				msgcnt = 0
-				Time = 0
-				bestblock = nil
-				continue
 			}
 		default:
-			seq := c.seq
-			block := c.blockChain.getBlock(seq)
-			c.GetTarget(block)
-			c.GetNonce(block)
-			valid := checkWork(block.Hash, block.Target)
-			if valid {
-				Time = time.Now().UnixNano()
-				c.propose(block, Time)
-				bestblock = block
-			}
-
+			time.Sleep(time.Duration(20) * time.Millisecond)
 		}
+	}else{
+		break
 	}
+}
+		c.blockChain.commitBlock(bestblock)
+		c.seq++
+		bestblock = nil
+		msgcnt = 0
+
+
+	}
+
 }
 
 // 以下为添加的代码，包括给consensus的区块链中的每个区块确定target， 计算哈希值，寻找Nonce，etc.
@@ -178,7 +181,11 @@ func (c *Consensus) GetTarget(block *Block) {
 		return
 	}
 
-	for i := 0; i < 10; i++ {
+	for i:= 0; i<diff; i++{
+		block.Target[i] = byte(0)
+	}
+
+	for i := diff; i < 10; i++ {
 		block.Target[i] = byte(rand.Intn(256))
 	}
 
@@ -205,10 +212,12 @@ func (c *Consensus) GetNonce(block *Block) {
 	}
 
 	nonce = 0
+
+	Target := block.Target
+	data := block.Data
+
+	Hash := Nonce2Hash(nonce, data)
 	for {
-		data := block.Data
-		Hash := Nonce2Hash(nonce, data)
-		Target := block.Target
 		if bytes.Compare(Hash, Target) == 1 {
 			block.Hash = Hash
 			break
@@ -217,6 +226,7 @@ func (c *Consensus) GetNonce(block *Block) {
 		}
 
 	}
+
 	block.Nonce = nonce
 
 	return
