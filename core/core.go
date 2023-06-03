@@ -133,6 +133,8 @@ func (c *Consensus) Run() {
 	besttime := int64(0)
 	bestblock := &Block{}
 	msgcnt := 0
+	validcnt := 6
+	stopcnt := 0
 	for {
 		seq := c.seq
 		block := c.blockChain.getBlock(seq)
@@ -146,29 +148,38 @@ func (c *Consensus) Run() {
 			besttime = Time
 		}
 		for {
-			if msgcnt < 6{
-			select{
-		case msg := <-c.msgChan:
-			if msg.Seq == c.seq {
-				msgcnt++
-				optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
-				if optionalbestblock != bestblock {
-					bestblock = optionalbestblock
-					besttime = msg.Time
-				}
+			if validcnt <= 4{
+				close(c.msgChan)
+				break
 			}
-		default:
-			time.Sleep(time.Duration(20) * time.Millisecond)
+			if msgcnt < validcnt {
+				select {
+				case msg := <-c.msgChan:
+					if msg.Seq == c.seq {
+						msgcnt++
+						optionalbestblock := c.handleMsgExample(msg, bestblock, besttime) //比较两者哪个更好，更好的做bestblock
+						if optionalbestblock != bestblock {
+							bestblock = optionalbestblock
+							besttime = msg.Time
+						}
+					}
+					default:
+					if stopcnt < 50{
+					stopcnt++
+					time.Sleep(time.Duration(30) * time.Millisecond)
+					}else{
+						validcnt--
+					}
+				}
+			} else {
+				break
+			}
 		}
-	}else{
-		break
-	}
-}
 		c.blockChain.commitBlock(bestblock)
 		c.seq++
 		bestblock = nil
 		msgcnt = 0
-
+		stopcnt = 0
 
 	}
 
