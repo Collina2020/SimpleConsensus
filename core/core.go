@@ -148,7 +148,7 @@ func (c *Consensus) Run() {
 			besttime = Time
 		}
 		for {
-			if validcnt <= 4{
+			if validcnt < 4{
 				close(c.msgChan)
 				break
 			}
@@ -164,7 +164,7 @@ func (c *Consensus) Run() {
 						}
 					}
 					default:
-					if stopcnt < 50{
+					if stopcnt < 40{
 					stopcnt++
 					time.Sleep(time.Duration(30) * time.Millisecond)
 					}else{
